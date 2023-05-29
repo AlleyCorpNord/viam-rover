@@ -1,6 +1,8 @@
 """Module makes a rover follow a line using a webcam for color detection."""
 
 import asyncio
+import datetime
+import os
 
 from viam.robot.client import RobotClient
 from viam.rpc.dial import Credentials, DialOptions
@@ -34,7 +36,6 @@ async def is_color_in_front(camera, vis):
     cropped_frame = frame.crop((x * 0.4, y * 0.75, x * 0.6, y))
 
     detections = await vis.get_detections(cropped_frame)  # , detector_name)
-    print(f"front: {detections}")
 
     if detections != []:
         return True
@@ -58,7 +59,7 @@ async def is_color_there(camera, vis, location):
 
     detections = await vis.get_detections(cropped_frame)  # , detector_name)
 
-    print(f"{location}: {detections}")
+    # print(f"{location}: {detections}")
     if detections != []:
         return True
     return False
@@ -112,30 +113,34 @@ async def main():
         linear_power = 0.35
         angular_power = 0.25
 
+        at_station = False
+
         # The main control loop
         while counter <= 3:
-            if await is_station(camera, pink_vision):
+            if not at_station and await is_station(camera, pink_vision):
+                at_station = True
                 print("pink detected")
                 await base.stop()
 
-                asyncio.sleep(4)
+                await asyncio.sleep(4)
                 # Play sound
-                break
+                continue
 
+            at_station = False
             while await is_color_in_front(camera, green_vision):
-                print("going straight")
+                # print("going straight")
                 # Moves the base slowly forward in a straight line
                 await base.set_power(Vector3(y=linear_power), Vector3())
                 counter == 0
 
             # If there is green to the left, turns the base left at a continuous, slow speed
             if await is_color_there(camera, green_vision, "left"):
-                print("going left")
+                # print("going left")
                 await base.set_power(Vector3(), Vector3(z=angular_power))
                 counter == 0
             # If there is green to the right, turns the base right at a continuous, slow speed
             elif await is_color_there(camera, green_vision, "right"):
-                print("going right")
+                # print("going right")
                 await base.set_power(Vector3(), Vector3(z=-angular_power))
                 counter == 0
 
