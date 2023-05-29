@@ -12,12 +12,16 @@ from viam.services.vision import VisionClient
 # States
 DRIVE = "drive"
 APPROACHING = "approaching"
+CLOSED_TO_BAGEL = "closed_to_bagel"
 STATION = "station"
 
 # Fine tuning
 ANGULAR_POWER = 0.25
 LINEAR_POWER = 0.35
 
+# Bagel detection parameters
+BAGEL_DETECTION_CLASSES = ["59", "60"]
+BAGEL_DETECTION_CONFIDENCE = 0.55
 # CROP = {
 #     "FRONT": (x * 0.4, y * 0.75, x * 0.6, y),
 # }
@@ -36,6 +40,7 @@ async def main():
 
         green_vision = VisionClient.from_robot(robot, "green_detector")
         pink_vision = VisionClient.from_robot(robot, "pink_detector")
+        bagel_vision = VisionClient.from_robot(robot, "bagel_detector")
         lost_count = 0
         lost_threshold = 3
         state = DRIVE
@@ -47,11 +52,19 @@ async def main():
                 found = await drive(base, frame, green_vision)
                 if await is_approaching_station(frame, pink_vision):
                     state = APPROACHING
+                if await is_detecting_bagel(frame, bagel_vision):
+                    state = CLOSED_TO_BAGEL
             elif state == APPROACHING:
                 found = await drive(base, frame, green_vision)
                 if not await is_approaching_station(frame, pink_vision):
                     state = STATION
             elif state == STATION:
+                await stop_robot(robot)
+                await asyncio.sleep(4)
+                state = DRIVE
+            elif state == CLOSED_TO_BAGEL:
+                print("Bagel detected!")
+                # TODO make it get closer and pick the bagel
                 await stop_robot(robot)
                 await asyncio.sleep(4)
                 state = DRIVE
@@ -137,6 +150,11 @@ async def is_approaching_station(frame, vis):
     cropped_frame = frame.crop((0, y * 0.9, x, y))
     detections = await vis.get_detections(cropped_frame)
     return detections != []
+
+
+async def is_detecting_bagel(frame, vis):
+    detections = await vis.get_detections(frame)
+    return [detection for detection in detections if detection.class_name in BAGEL_DETECTION_CLASSES and detection.confidence > BAGEL_DETECTION_CONFIDENCE] != []
 
 
 async def stop_robot(robot):
