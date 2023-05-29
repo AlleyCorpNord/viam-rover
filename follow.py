@@ -52,6 +52,7 @@ async def main():
                 if not await is_approaching_station(frame, pink_vision):
                     state = STATION
             elif state == STATION:
+                await stop_robot(robot)
                 await asyncio.sleep(4)
                 state = DRIVE
 
