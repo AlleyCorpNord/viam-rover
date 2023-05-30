@@ -12,12 +12,6 @@ from viam.components.base import Base, Vector3
 from viam.components.camera import Camera
 from viam.services.vision import VisionClient
 
-# States
-DRIVE = "drive"
-APPROACHING = "approaching"
-CLOSE_TO_BAGEL = "close_to_bagel"
-STATION = "station"
-
 # Fine tuning
 ANGULAR_POWER = 0.25
 LINEAR_POWER = 0.35
@@ -27,6 +21,18 @@ REALLY_LOST_THRESHOLD = 20
 # Bagel detection parameters
 BAGEL_DETECTION_CLASSES = ["59", "60"]
 BAGEL_DETECTION_CONFIDENCE = 0.55
+
+# Crops
+CROP_LOOK_AHEAD = (0.4, 0.75, 0.6, 1)
+CROP_LOOK_LEFT = (0, 0.5, 0.45, 1)
+CROP_LOOK_RIGHT = (0.55, 0.5, 1, 1)
+CROP_APPROACHING_STATION = (0, 0.9, 1, 1)
+
+# States
+DRIVE = "drive"
+APPROACHING = "approaching"
+CLOSE_TO_BAGEL = "close_to_bagel"
+STATION = "station"
 
 
 class LostError(Exception):
@@ -95,19 +101,19 @@ async def main():
 
 
 async def drive(base, frame, green_vision, lost=False):
-    if await is_color_in_front(frame, green_vision):
+    if await is_track_in_view(frame, green_vision, CROP_LOOK_AHEAD):
         await base.set_power(Vector3(y=LINEAR_POWER), Vector3())
         return True
 
-    if await is_color_there(frame, green_vision, "left"):
+    if await is_track_in_view(frame, green_vision, CROP_LOOK_LEFT):
         await base.set_power(Vector3(), Vector3(z=ANGULAR_POWER))
         return True
 
-    if await is_color_there(frame, green_vision, "right"):
+    if await is_track_in_view(frame, green_vision, CROP_LOOK_RIGHT):
         await base.set_power(Vector3(), Vector3(z=-ANGULAR_POWER))
         return True
 
-    # If we didn't find any colour and we're lost, keep turning.
+    # If we didn't find the track and we're lost, keep turning.
     if lost:
         await base.set_power(Vector3(), Vector3(z=-ANGULAR_POWER))
 
@@ -115,7 +121,6 @@ async def drive(base, frame, green_vision, lost=False):
 
 
 async def connect(secret, domain):
-    # viam1
     creds = Credentials(type="robot-location-secret", payload=secret)
     opts = RobotClient.Options(
         refresh_interval=0, dial_options=DialOptions(credentials=creds)
@@ -123,49 +128,33 @@ async def connect(secret, domain):
     return await RobotClient.at_address(domain, opts)
 
 
-async def is_color_in_front(frame, vis):
+async def is_track_in_view(frame, vis, crop):
+    """Returns whether the track is detected in the portion of ``frame`` as
+    determined by ``crop``.
     """
-    Returns whether the appropriate path color is detected in front of the center of the robot.
-    """
-    detections = await detections(vis, frame, (0.4, 0.75, 0.6, 1))
-    return any(detections)
-
-
-async def is_color_there(frame, vis, location):
-    """
-    Returns whether the appropriate path color is detected to the left/right of the robot's front.
-    """
-    detections = await detections(
-        vis, frame, (0, 0.5, 0.45, 1) if location == "left" else (0.55, 0.5, 1, 1)
-    )
-    return any(detections)
+    return any(await detections(vis, frame, crop))
 
 
 async def is_approaching_station(frame, vis):
-    detections = await detections(frame, vis, (0, 0.9, 1, 1))
-    return any(detections)
+    return any(await detections(frame, vis, CROP_APPROACHING_STATION))
 
 
 async def is_detecting_bagel(frame, vis):
-    detections = await detections(frame, vis)
     return any(
         [
             detection.class_name in BAGEL_DETECTION_CLASSES
             and detection.confidence > BAGEL_DETECTION_CONFIDENCE
-            for detection in detections
+            for detection in await detections(frame, vis)
         ]
     )
 
 
 async def detections(vis, frame, crop=(0, 0, 1, 1)):
-    x, y = frame.size
-    vis.get_detections(tuple(starmap(mul, zip(crop, (x, y, x, y)))))
+    vis.get_detections(tuple(starmap(mul, zip(crop, frame.size + frame.size))))
 
 
 async def stop_robot(robot):
-    """
-    Stop the robot's motion.
-    """
+    """Stop the robot's motion."""
     base = Base.from_robot(robot, "viam_base")
     await base.stop()
 
