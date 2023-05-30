@@ -12,7 +12,7 @@ from viam.services.vision import VisionClient
 # States
 DRIVE = "drive"
 APPROACHING = "approaching"
-CLOSED_TO_BAGEL = "closed_to_bagel"
+CLOSE_TO_BAGEL = "close_to_bagel"
 STATION = "station"
 
 # Fine tuning
@@ -56,7 +56,7 @@ async def main():
                 if await is_approaching_station(frame, pink_vision):
                     state = APPROACHING
                 if await is_detecting_bagel(frame, bagel_vision):
-                    state = CLOSED_TO_BAGEL
+                    state = CLOSE_TO_BAGEL
             elif state == APPROACHING:
                 found = await drive(base, frame, green_vision)
                 if not await is_approaching_station(frame, pink_vision):
@@ -65,7 +65,7 @@ async def main():
                 await stop_robot(robot)
                 await asyncio.sleep(4)
                 state = DRIVE
-            elif state == CLOSED_TO_BAGEL:
+            elif state == CLOSE_TO_BAGEL:
                 print("Bagel detected!")
                 # TODO make it get closer and pick the bagel
                 await stop_robot(robot)
@@ -163,12 +163,13 @@ async def is_approaching_station(frame, vis):
 
 async def is_detecting_bagel(frame, vis):
     detections = await vis.get_detections(frame)
-    return [
-        detection
-        for detection in detections
-        if detection.class_name in BAGEL_DETECTION_CLASSES
-        and detection.confidence > BAGEL_DETECTION_CONFIDENCE
-    ] != []
+    return any(
+        [
+            detection.class_name in BAGEL_DETECTION_CLASSES
+            and detection.confidence > BAGEL_DETECTION_CONFIDENCE
+            for detection in detections
+        ]
+    )
 
 
 async def stop_robot(robot):
