@@ -19,7 +19,7 @@ LOST_THRESHOLD = 3
 REALLY_LOST_THRESHOLD = 20
 
 # Bagel detection parameters
-BAGEL_DETECTION_CLASSES = ["59", "60"]
+BAGEL_DETECTION_CLASSES = ("59", "60")
 BAGEL_DETECTION_CONFIDENCE = 0.55
 
 # Crops
@@ -46,8 +46,8 @@ async def main():
         camera = Camera.from_robot(robot, "cam")
         base = Base.from_robot(robot, "viam_base")
 
-        green_vision = VisionClient.from_robot(robot, "green_detector")
-        pink_vision = VisionClient.from_robot(robot, "pink_detector")
+        track_vision = VisionClient.from_robot(robot, "green_detector")
+        station_vision = VisionClient.from_robot(robot, "pink_detector")
         bagel_vision = VisionClient.from_robot(robot, "bagel_detector")
         lost_count = 0
         prev_state = None
@@ -61,14 +61,14 @@ async def main():
             frame = await camera.get_image(mime_type="image/jpeg")
 
             if state == DRIVE:
-                found = await drive(base, frame, green_vision)
-                if await is_approaching_station(frame, pink_vision):
+                found = await drive(base, frame, track_vision)
+                if await is_approaching_station(frame, station_vision):
                     state = APPROACHING
                 if await is_detecting_bagel(frame, bagel_vision):
                     state = CLOSE_TO_BAGEL
             elif state == APPROACHING:
-                found = await drive(base, frame, green_vision)
-                if not await is_approaching_station(frame, pink_vision):
+                found = await drive(base, frame, track_vision)
+                if not await is_approaching_station(frame, station_vision):
                     state = STATION
             elif state == STATION:
                 await stop_robot(robot)
@@ -81,7 +81,7 @@ async def main():
                 await asyncio.sleep(4)
                 state = DRIVE
             elif state == LOST:
-                found = await drive(base, frame, green_vision, True)
+                found = await drive(base, frame, track_vision, True)
 
             if found:
                 lost_count = 0
@@ -100,16 +100,16 @@ async def main():
         await robot.close()
 
 
-async def drive(base, frame, green_vision, lost=False):
-    if await is_track_in_view(frame, green_vision, CROP_LOOK_AHEAD):
+async def drive(base, frame, track_vision, lost=False):
+    if await is_track_in_view(frame, track_vision, CROP_LOOK_AHEAD):
         await base.set_power(Vector3(y=LINEAR_POWER), Vector3())
         return True
 
-    if await is_track_in_view(frame, green_vision, CROP_LOOK_LEFT):
+    if await is_track_in_view(frame, track_vision, CROP_LOOK_LEFT):
         await base.set_power(Vector3(), Vector3(z=ANGULAR_POWER))
         return True
 
-    if await is_track_in_view(frame, green_vision, CROP_LOOK_RIGHT):
+    if await is_track_in_view(frame, track_vision, CROP_LOOK_RIGHT):
         await base.set_power(Vector3(), Vector3(z=-ANGULAR_POWER))
         return True
 
