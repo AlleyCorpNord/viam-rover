@@ -3,6 +3,9 @@
 import asyncio
 import os
 
+from itertools import starmap
+from operations import mul
+
 from viam.robot.client import RobotClient
 from viam.rpc.dial import Credentials, DialOptions
 from viam.components.base import Base, Vector3
@@ -18,6 +21,8 @@ STATION = "station"
 # Fine tuning
 ANGULAR_POWER = 0.25
 LINEAR_POWER = 0.35
+LOST_THRESHOLD = 3
+REALLY_LOST_THRESHOLD = 20
 
 # Bagel detection parameters
 BAGEL_DETECTION_CLASSES = ["59", "60"]
@@ -39,8 +44,6 @@ async def main():
         pink_vision = VisionClient.from_robot(robot, "pink_detector")
         bagel_vision = VisionClient.from_robot(robot, "bagel_detector")
         lost_count = 0
-        lost_threshold = 3
-        really_lost_threshold = 20
         prev_state = None
         state = DRIVE
 
@@ -78,9 +81,9 @@ async def main():
                 lost_count = 0
             else:
                 lost_count += 1
-                if lost_count > lost_threshold:
+                if lost_count > LOST_THRESHOLD:
                     state = LOST
-                elif lost_count > really_lost_threshold:
+                elif lost_count > REALLY_LOST_THRESHOLD:
                     raise LostError()
 
     except KeyboardInterrupt:
@@ -124,45 +127,27 @@ async def is_color_in_front(frame, vis):
     """
     Returns whether the appropriate path color is detected in front of the center of the robot.
     """
-    x, y = frame.size[0], frame.size[1]
-
-    # Crop the image to get only the middle fifth of the top third of the original image
-    cropped_frame = frame.crop((x * 0.4, y * 0.75, x * 0.6, y))
-
-    detections = await vis.get_detections(cropped_frame)  # , detector_name)
-
-    return detections != []
+    detections = await detections(vis, frame, (0.4, 0.75, 0.6, 1))
+    return any(detections)
 
 
 async def is_color_there(frame, vis, location):
     """
     Returns whether the appropriate path color is detected to the left/right of the robot's front.
     """
-    # frame = await camera.get_image(mime_type="image/jpeg")
-    x, y = frame.size[0], frame.size[1]
-
-    if location == "left":
-        # Crop image to get only the left two fifths of the original image
-        cropped_frame = frame.crop((0, y * 0.5, x * 0.45, y))
-
-    elif location == "right":
-        # Crop image to get only the right two fifths of the original image
-        cropped_frame = frame.crop((x * 0.55, y * 0.5, x, y))
-
-    detections = await vis.get_detections(cropped_frame)  # , detector_name)
-
-    return detections != []
+    detections = await detections(
+        vis, frame, (0, 0.5, 0.45, 1) if location == "left" else (0.55, 0.5, 1, 1)
+    )
+    return any(detections)
 
 
 async def is_approaching_station(frame, vis):
-    x, y = frame.size[0], frame.size[1]
-    cropped_frame = frame.crop((0, y * 0.9, x, y))
-    detections = await vis.get_detections(cropped_frame)
-    return detections != []
+    detections = await detections(frame, vis, (0, 0.9, 1, 1))
+    return any(detections)
 
 
 async def is_detecting_bagel(frame, vis):
-    detections = await vis.get_detections(frame)
+    detections = await detections(frame, vis)
     return any(
         [
             detection.class_name in BAGEL_DETECTION_CLASSES
@@ -170,6 +155,11 @@ async def is_detecting_bagel(frame, vis):
             for detection in detections
         ]
     )
+
+
+async def detections(vis, frame, crop=(0, 0, 1, 1)):
+    x, y = frame.size
+    vis.get_detections(tuple(starmap(mul, zip(crop, (x, y, x, y)))))
 
 
 async def stop_robot(robot):
