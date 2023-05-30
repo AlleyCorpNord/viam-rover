@@ -22,9 +22,6 @@ LINEAR_POWER = 0.35
 # Bagel detection parameters
 BAGEL_DETECTION_CLASSES = ["59", "60"]
 BAGEL_DETECTION_CONFIDENCE = 0.55
-# CROP = {
-#     "FRONT": (x * 0.4, y * 0.75, x * 0.6, y),
-# }
 
 
 class LostError(Exception):
@@ -43,9 +40,15 @@ async def main():
         bagel_vision = VisionClient.from_robot(robot, "bagel_detector")
         lost_count = 0
         lost_threshold = 3
+        really_lost_threshold = 20
+        prev_state = None
         state = DRIVE
 
         while True:
+            if state != prev_state:
+                print(f"changed to: {state}")
+                prev_state = state
+
             frame = await camera.get_image(mime_type="image/jpeg")
 
             if state == DRIVE:
@@ -68,12 +71,16 @@ async def main():
                 await stop_robot(robot)
                 await asyncio.sleep(4)
                 state = DRIVE
+            elif state == LOST:
+                found = await drive(base, frame, green_vision, True)
 
             if found:
                 lost_count = 0
             else:
                 lost_count += 1
                 if lost_count > lost_threshold:
+                    state = LOST
+                elif lost_count > really_lost_threshold:
                     raise LostError()
 
     except KeyboardInterrupt:
@@ -84,7 +91,7 @@ async def main():
         await robot.close()
 
 
-async def drive(base, frame, green_vision):
+async def drive(base, frame, green_vision, lost=False):
     if await is_color_in_front(frame, green_vision):
         await base.set_power(Vector3(y=LINEAR_POWER), Vector3())
         return True
@@ -96,6 +103,10 @@ async def drive(base, frame, green_vision):
     if await is_color_there(frame, green_vision, "right"):
         await base.set_power(Vector3(), Vector3(z=-ANGULAR_POWER))
         return True
+
+    # If we didn't find any colour and we're lost, keep turning.
+    if lost:
+        await base.set_power(Vector3(), Vector3(z=-ANGULAR_POWER))
 
     return False
 
@@ -119,7 +130,6 @@ async def is_color_in_front(frame, vis):
     cropped_frame = frame.crop((x * 0.4, y * 0.75, x * 0.6, y))
 
     detections = await vis.get_detections(cropped_frame)  # , detector_name)
-    # print(f"front: {detections}")
 
     return detections != []
 
@@ -141,7 +151,6 @@ async def is_color_there(frame, vis, location):
 
     detections = await vis.get_detections(cropped_frame)  # , detector_name)
 
-    # print(f"{location}: {detections}")
     return detections != []
 
 
@@ -154,7 +163,12 @@ async def is_approaching_station(frame, vis):
 
 async def is_detecting_bagel(frame, vis):
     detections = await vis.get_detections(frame)
-    return [detection for detection in detections if detection.class_name in BAGEL_DETECTION_CLASSES and detection.confidence > BAGEL_DETECTION_CONFIDENCE] != []
+    return [
+        detection
+        for detection in detections
+        if detection.class_name in BAGEL_DETECTION_CLASSES
+        and detection.confidence > BAGEL_DETECTION_CONFIDENCE
+    ] != []
 
 
 async def stop_robot(robot):
