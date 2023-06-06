@@ -27,6 +27,7 @@ CROP_LOOK_AHEAD = (0.4, 0.75, 0.6, 1)
 CROP_LOOK_LEFT = (0, 0.5, 0.45, 1)
 CROP_LOOK_RIGHT = (0.55, 0.5, 1, 1)
 CROP_APPROACHING_STATION = (0, 0.9, 1, 1)
+CROP_APPROACHING_OBSTABLE = (0, 0.75, 1, 1)
 
 # States
 DRIVE = "drive"
@@ -34,6 +35,7 @@ APPROACHING = "approaching"
 LOST= "lost"
 CLOSE_TO_BAGEL = "close_to_bagel"
 STATION = "station"
+AVOIDING_OBSTACLE = "avoiding_obstacle"
 
 
 class LostError(Exception):
@@ -49,7 +51,8 @@ async def main():
 
         track_vision = VisionClient.from_robot(robot, "green_detector")
         station_vision = VisionClient.from_robot(robot, "pink_detector")
-        # bagel_vision = VisionClient.from_robot(robot, "bagel_detector")
+        obstable_vision = VisionClient.from_robot(robot, "obstacle_detector")
+        bagel_vision = VisionClient.from_robot(robot, "bagel_detector")
         lost_count = 0
         prev_state = None
         state = DRIVE
@@ -63,9 +66,14 @@ async def main():
 
             if state == DRIVE:
                 found = await drive(base, frame, track_vision)
+
+                if await is_approaching_obstacle(frame, obstable_vision):
+                    state = AVOIDING_OBSTACLE
+                    continue
+
                 if await is_approaching_station(frame, station_vision):
                     state = APPROACHING
-                # if await is_detecting_bagel(frame, bagel_vision):
+                if await is_detecting_bagel(frame, bagel_vision):
                     state = CLOSE_TO_BAGEL
             elif state == APPROACHING:
                 found = await drive(base, frame, track_vision)
@@ -83,7 +91,15 @@ async def main():
                 state = DRIVE
             elif state == LOST:
                 found = await drive(base, frame, track_vision, True)
-
+            elif state == AVOIDING_OBSTACLE:
+                await base.spin(angle=-90, velocity=30)
+                await asyncio.sleep(3)
+                
+                # loop
+                await base.set_power(Vector3(y=0.5), Vector3(z=0.15))
+                await asyncio.sleep(4)
+                state = LOST
+                continue
             if found:
                 lost_count = 0
             else:
@@ -139,6 +155,9 @@ async def is_track_in_view(frame, vis, crop):
 async def is_approaching_station(frame, vis):
     return any(await detections(vis, frame, CROP_APPROACHING_STATION) or [])
 
+async def is_approaching_obstacle(frame, vis):
+    return any(await detections(vis, frame, CROP_APPROACHING_OBSTABLE) or [])
+
 
 async def is_detecting_bagel(frame, vis):
     return any(
@@ -152,8 +171,6 @@ async def is_detecting_bagel(frame, vis):
 
 async def detections(vis, frame, crop=(0, 0, 1, 1)):
     cropped_frame = frame.crop(tuple(starmap(mul, zip(crop, frame.size + frame.size))))
-    
-    print(cropped_frame.size, cropped_frame)
     return await vis.get_detections(cropped_frame)
 
 
