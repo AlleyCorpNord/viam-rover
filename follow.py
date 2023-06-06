@@ -4,7 +4,7 @@ import asyncio
 import os
 
 from itertools import starmap
-from operations import mul
+from operator import mul
 
 from viam.robot.client import RobotClient
 from viam.rpc.dial import Credentials, DialOptions
@@ -31,6 +31,7 @@ CROP_APPROACHING_STATION = (0, 0.9, 1, 1)
 # States
 DRIVE = "drive"
 APPROACHING = "approaching"
+LOST= "lost"
 CLOSE_TO_BAGEL = "close_to_bagel"
 STATION = "station"
 
@@ -132,11 +133,11 @@ async def is_track_in_view(frame, vis, crop):
     """Returns whether the track is detected in the portion of ``frame`` as
     determined by ``crop``.
     """
-    return any(await detections(vis, frame, crop))
+    return any(await detections(vis, frame, crop) or [])
 
 
 async def is_approaching_station(frame, vis):
-    return any(await detections(frame, vis, CROP_APPROACHING_STATION))
+    return any(await detections(vis, frame, CROP_APPROACHING_STATION) or [])
 
 
 async def is_detecting_bagel(frame, vis):
@@ -144,7 +145,7 @@ async def is_detecting_bagel(frame, vis):
         [
             detection.class_name in BAGEL_DETECTION_CLASSES
             and detection.confidence > BAGEL_DETECTION_CONFIDENCE
-            for detection in await detections(frame, vis)
+            for detection in await detections(frame, vis) or []
         ]
     )
 
