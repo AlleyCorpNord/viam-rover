@@ -49,7 +49,7 @@ async def main():
 
         track_vision = VisionClient.from_robot(robot, "green_detector")
         station_vision = VisionClient.from_robot(robot, "pink_detector")
-        bagel_vision = VisionClient.from_robot(robot, "bagel_detector")
+        # bagel_vision = VisionClient.from_robot(robot, "bagel_detector")
         lost_count = 0
         prev_state = None
         state = DRIVE
@@ -65,7 +65,7 @@ async def main():
                 found = await drive(base, frame, track_vision)
                 if await is_approaching_station(frame, station_vision):
                     state = APPROACHING
-                if await is_detecting_bagel(frame, bagel_vision):
+                # if await is_detecting_bagel(frame, bagel_vision):
                     state = CLOSE_TO_BAGEL
             elif state == APPROACHING:
                 found = await drive(base, frame, track_vision)
@@ -151,7 +151,10 @@ async def is_detecting_bagel(frame, vis):
 
 
 async def detections(vis, frame, crop=(0, 0, 1, 1)):
-    vis.get_detections(tuple(starmap(mul, zip(crop, frame.size + frame.size))))
+    cropped_frame = frame.crop(tuple(starmap(mul, zip(crop, frame.size + frame.size))))
+    
+    print(cropped_frame.size, cropped_frame)
+    return await vis.get_detections(cropped_frame)
 
 
 async def stop_robot(robot):
