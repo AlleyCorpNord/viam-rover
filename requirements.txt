@@ -1,0 +1,14 @@
+cffi==1.15.1
+googleapis-common-protos==1.59.1
+grpclib==0.4.4
+h2==4.1.0
+hpack==4.0.0
+hyperframe==6.0.1
+multidict==6.0.4
+Pillow==9.5.0
+protobuf==4.23.2
+pycparser==2.21
+sounddevice==0.4.6
+soundfile==0.12.1
+typing-extensions==4.6.3
+viam-sdk==0.4.0

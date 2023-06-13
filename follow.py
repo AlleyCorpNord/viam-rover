@@ -6,6 +6,9 @@ import os
 from itertools import starmap
 from operator import mul
 
+import sounddevice as sd
+import soundfile as sf
+
 from viam.robot.client import RobotClient
 from viam.rpc.dial import Credentials, DialOptions
 from viam.components.base import Base, Vector3
@@ -74,6 +77,7 @@ async def main():
             elif state == STATION:
                 await stop_robot(robot)
                 await asyncio.sleep(4)
+                play_sound()
                 state = DRIVE
             elif state == CLOSE_TO_BAGEL:
                 print("Bagel detected!")
@@ -123,9 +127,18 @@ async def drive(base, frame, track_vision, lost=False):
 
 async def connect(secret, domain):
     creds = Credentials(type="robot-location-secret", payload=secret)
+    if "ROBOT_AUTH_ENTITY" in os.environ:
+        dial_options=DialOptions(
+            disable_webrtc=True,
+            auth_entity=os.environ["ROBOT_AUTH_ENTITY"],
+            credentials=creds
+        )
+    else:
+        dial_options=DialOptions(credentials=creds)
+
     opts = RobotClient.Options(
-        refresh_interval=0, dial_options=DialOptions(credentials=creds)
-    )
+        refresh_interval=0, dial_options=dial_options)
+
     return await RobotClient.at_address(domain, opts)
 
 
@@ -152,7 +165,7 @@ async def is_detecting_bagel(frame, vis):
 
 async def detections(vis, frame, crop=(0, 0, 1, 1)):
     cropped_frame = frame.crop(tuple(starmap(mul, zip(crop, frame.size + frame.size))))
-    
+
     print(cropped_frame.size, cropped_frame)
     return await vis.get_detections(cropped_frame)
 
@@ -162,6 +175,17 @@ async def stop_robot(robot):
     base = Base.from_robot(robot, "viam_base")
     await base.stop()
 
+def play_sound():
+    try:
+      filename = os.environ["METRO_SOUND_PATH"]
+    except KeyError:
+        print("METRO_SOUND_PATH not set, not playing sound")
+        return
+
+    # Extract data and sampling rate from file
+    data, fs = sf.read(filename, dtype='float32')
+    sd.play(data, fs)
+    status = sd.wait()
 
 if __name__ == "__main__":
     print("Starting up...")
