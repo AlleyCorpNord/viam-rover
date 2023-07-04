@@ -91,9 +91,11 @@ async def main():
             #     play_sound()
             #     state = DRIVE
             elif state == IMPASSABLE_OBSTACLE_AHEAD:
-                found = await drive(base, frame, track_vision, linear_power=IMPASSABLE_POWER)
-                if not await is_detecting_obstacle(frame, obstacle_vision, IMPASSABLE_OBSTACLE_DETECTION_CLASS, IMPASSABLE_OBSTACLE_DETECTION_CONFIDENCE):
-                    state = DRIVE
+                # found = await drive(base, frame, track_vision, linear_power=IMPASSABLE_POWER)
+                # if not await is_detecting_obstacle(frame, obstacle_vision, IMPASSABLE_OBSTACLE_DETECTION_CLASS, IMPASSABLE_OBSTACLE_DETECTION_CONFIDENCE):
+                #     state = DRIVE
+                await evasive_maneuver(base)
+                state = DRIVE
             elif state == PASSABLE_OBSTACLE_AHEAD:
                 found = await drive(base, frame, track_vision, linear_power=PASSABLE_POWER)
                 if not await is_detecting_obstacle(frame, obstacle_vision, PASSABLE_OBSTACLE_DETECTION_CLASS, PASSABLE_OBSTACLE_DETECTION_CONFIDENCE):
@@ -107,16 +109,13 @@ async def main():
                 lost_count += 1
                 if lost_count > REALLY_LOST_THRESHOLD:
                     # raise LostError()
-                    await stop_robot(base)
-                    await robot.close()
                     break
                 elif lost_count > LOST_THRESHOLD:
                     state = LOST
 
     except KeyboardInterrupt:
-        await stop_robot(base)
-        await robot.close()
-
+        pass
+    
     finally:
         await stop_robot(base)
         await robot.close()
@@ -140,6 +139,12 @@ async def drive(base, frame, track_vision, lost=False, linear_power=LINEAR_POWER
         await base.set_power(Vector3(), Vector3(z=-ANGULAR_POWER))
     return False
 
+async def evasive_maneuver(base):
+    # Note: this function is trash lol
+    await base.spin(angle=90, velocity=90)
+    await base.set_power(linear=Vector3(y=LINEAR_POWER), angular=Vector3(z=-ANGULAR_POWER), timeout=5)
+    await base.spin(angle=-90, velocity=-90)
+    
 
 async def connect(secret, domain):
     creds = Credentials(type="robot-location-secret", payload=secret)
