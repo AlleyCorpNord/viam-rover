@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from viam.robot.client import RobotClient
@@ -19,5 +20,7 @@ async def connect(secret: str, domain: str, auth_entity: str | None):
 
     try:
         yield robot
+    except (KeyboardInterrupt, asyncio.exceptions.CancelledError):
+        pass
     finally:
         await robot.close()
