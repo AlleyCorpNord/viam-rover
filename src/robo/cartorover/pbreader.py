@@ -1,6 +1,9 @@
 """
-Stolen from:
+Copied from:
 https://github.com/meyerjo/cartographer-read-pbstream/blob/main/src/pbstream/reader.py
+
+UNLICENSED!!  If we wish to use this commercially, we will need to either
+rewrite or secure the author's permission.
 """
 from __future__ import annotations
 
